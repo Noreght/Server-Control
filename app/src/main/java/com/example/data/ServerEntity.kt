@@ -21,5 +21,6 @@ data class ServerEntity(
   val privateKeyFileName: String? = null,
   val passphrase: String? = null,
   val isActive: Boolean = false,
+  val needsAuthPrompt: Boolean = false,
   val createdAt: Long = System.currentTimeMillis()
 )

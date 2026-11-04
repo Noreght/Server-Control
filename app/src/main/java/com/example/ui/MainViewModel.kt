@@ -113,6 +113,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
   private val _selectedServerMenuId = MutableStateFlow<Long?>(null)
   val selectedServerMenuId: StateFlow<Long?> = _selectedServerMenuId.asStateFlow()
 
+  private val _authPromptServer = MutableStateFlow<ServerEntity?>(null)
+  val authPromptServer: StateFlow<ServerEntity?> = _authPromptServer.asStateFlow()
+
   private var fetchJob: Job? = null
 
   init {
@@ -144,9 +147,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
       }
 
-      // If servers exist but none is marked active, activate the first one automatically
+      // If servers exist but none is marked active, activate the first one automatically if it has credentials
       if (initialList.isNotEmpty() && initialList.none { it.isActive }) {
-        repository.setActiveServer(initialList.first().id)
+        val firstConnectable = initialList.firstOrNull {
+          !it.needsAuthPrompt && (it.authType != AuthMethod.PASSWORD.name || !it.password.isNullOrEmpty())
+        }
+        if (firstConnectable != null) {
+          repository.setActiveServer(firstConnectable.id)
+        }
       }
 
       _isInitialServersLoaded.value = true
@@ -344,7 +352,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
       privateKeyContent = form.privateKeyContent.takeIf { form.authType == AuthMethod.PRIVATE_KEY && it.isNotBlank() }?.let { securityManager.encrypt(it) },
       privateKeyFileName = form.privateKeyFileName.takeIf { form.authType == AuthMethod.PRIVATE_KEY },
       passphrase = form.passphrase.takeIf { form.authType == AuthMethod.PRIVATE_KEY && it.isNotBlank() }?.let { securityManager.encrypt(it) },
-      isActive = true // Activate upon save to immediately connect!
+      isActive = true, // Activate upon save to immediately connect!
+      needsAuthPrompt = false
     )
 
     viewModelScope.launch {
@@ -358,6 +367,94 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         _snackbarMessage.value = "Server '${entity.name}' updated"
       }
       _showServerDialog.value = false
+    }
+  }
+
+  fun handleServerSelection(server: ServerEntity) {
+    val needsAuth = server.needsAuthPrompt || (server.authType == AuthMethod.PASSWORD.name && server.password.isNullOrEmpty())
+    if (needsAuth) {
+      _authPromptServer.value = server
+    } else {
+      openServerMenu(server)
+    }
+  }
+
+  fun cancelAuthPrompt() {
+    _authPromptServer.value = null
+  }
+
+  fun submitServerAuth(server: ServerEntity, authSecret: String) {
+    viewModelScope.launch {
+      val updated = if (server.authType == AuthMethod.PRIVATE_KEY.name) {
+        server.copy(
+          passphrase = if (authSecret.isNotBlank()) securityManager.encrypt(authSecret) else null,
+          needsAuthPrompt = false
+        )
+      } else {
+        server.copy(
+          password = securityManager.encrypt(authSecret),
+          needsAuthPrompt = false
+        )
+      }
+      repository.updateServer(updated)
+      _authPromptServer.value = null
+      openServerMenu(updated)
+    }
+  }
+
+  fun exportServersToUri(uri: Uri) {
+    viewModelScope.launch {
+      try {
+        val servers = repository.getAllServersList()
+        val json = com.example.util.ServerBackupHelper.exportServersToJson(servers) { decryptServer(it) }
+        val context = getApplication<Application>()
+        context.contentResolver.openOutputStream(uri)?.use { outputStream ->
+          outputStream.write(json.toByteArray(Charsets.UTF_8))
+          outputStream.flush()
+        } ?: throw IllegalStateException("Could not open file for writing")
+        _snackbarMessage.value = "Exported ${servers.size} server(s) to backup"
+      } catch (e: Exception) {
+        _snackbarMessage.value = "Export error: ${e.message}"
+      }
+    }
+  }
+
+  fun importServersFromUri(uri: Uri) {
+    viewModelScope.launch {
+      try {
+        val context = getApplication<Application>()
+        val jsonString = context.contentResolver.openInputStream(uri)?.use { inputStream ->
+          inputStream.bufferedReader(Charsets.UTF_8).use { it.readText() }
+        } ?: throw IllegalStateException("Could not open file for reading")
+
+        val parseRes = com.example.util.ServerBackupHelper.parseServersFromJson(jsonString)
+        parseRes.fold(
+          onSuccess = { importedList ->
+            if (importedList.isEmpty()) {
+              _snackbarMessage.value = "No servers found in file"
+              return@fold
+            }
+            var count = 0
+            for (srv in importedList) {
+              val encrypted = srv.copy(
+                privateKeyContent = srv.privateKeyContent?.let { securityManager.encrypt(it) },
+                password = null,
+                passphrase = null,
+                needsAuthPrompt = true,
+                isActive = false
+              )
+              repository.insertServer(encrypted)
+              count++
+            }
+            _snackbarMessage.value = "Imported $count server(s) from backup"
+          },
+          onFailure = { err ->
+            _snackbarMessage.value = "Import failed: ${err.message}"
+          }
+        )
+      } catch (e: Exception) {
+        _snackbarMessage.value = "Import error: ${e.message}"
+      }
     }
   }
 

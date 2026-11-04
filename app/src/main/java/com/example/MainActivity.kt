@@ -45,6 +45,7 @@ import com.example.ui.MainTab
 import com.example.ui.MainViewModel
 import com.example.ui.ServerTab
 import com.example.ui.components.LogsSheet
+import com.example.ui.components.ServerAuthPromptDialog
 import com.example.ui.components.ServerDialog
 import com.example.ui.screens.ContainersScreen
 import com.example.ui.screens.LockScreen
@@ -81,6 +82,7 @@ class MainActivity : FragmentActivity() {
         val searchQuery by viewModel.searchQuery.collectAsStateWithLifecycle()
         val stateFilter by viewModel.stateFilter.collectAsStateWithLifecycle()
         val selectedServerMenuId by viewModel.selectedServerMenuId.collectAsStateWithLifecycle()
+        val authPromptServer by viewModel.authPromptServer.collectAsStateWithLifecycle()
 
         var currentMainTab by rememberSaveable { mutableStateOf(MainTab.SERVERS) }
         var currentServerTab by rememberSaveable { mutableStateOf(ServerTab.CONTAINERS) }
@@ -264,7 +266,7 @@ class MainActivity : FragmentActivity() {
                       activeServer = activeServer,
                       onAddServer = { viewModel.openAddServerDialog() },
                       onSelectActiveServer = { server ->
-                        viewModel.openServerMenu(server)
+                        viewModel.handleServerSelection(server)
                       },
                       onEditServer = { viewModel.openEditServerDialog(it) },
                       onDeleteServer = { viewModel.deleteServer(it) }
@@ -277,7 +279,10 @@ class MainActivity : FragmentActivity() {
                       isBiometricEnabled = isBiometricEnabled,
                       onToggleBiometric = { viewModel.toggleBiometric(it) },
                       onChangePin = { oldPin, newPin -> viewModel.changePin(oldPin, newPin) },
-                      onLockApp = { viewModel.lockApp() }
+                      onLockApp = { viewModel.lockApp() },
+                      onExportServers = { viewModel.exportServersToUri(it) },
+                      onImportServers = { viewModel.importServersFromUri(it) },
+                      serverCount = allServers.size
                     )
                   }
                 }
@@ -292,6 +297,19 @@ class MainActivity : FragmentActivity() {
                   onTestConnection = { viewModel.testServerConnection() },
                   onSave = { viewModel.saveServer() },
                   onDismiss = { viewModel.closeServerDialog() }
+                )
+              }
+
+              // Auth Prompt Dialog for imported servers requiring password or passphrase
+              if (authPromptServer != null) {
+                ServerAuthPromptDialog(
+                  server = authPromptServer!!,
+                  onConfirm = { secret ->
+                    viewModel.submitServerAuth(authPromptServer!!, secret)
+                  },
+                  onDismiss = {
+                    viewModel.cancelAuthPrompt()
+                  }
                 )
               }
 

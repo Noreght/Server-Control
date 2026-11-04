@@ -20,7 +20,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Dns
 import androidx.compose.material.icons.filled.Edit
@@ -33,7 +32,6 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedCard
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -252,45 +250,24 @@ fun ServersScreen(
               // Actions Row
               Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
+                horizontalArrangement = Arrangement.End,
                 verticalAlignment = Alignment.CenterVertically
               ) {
-                if (isActive) {
-                  OutlinedButton(
-                    onClick = { onSelectActiveServer(server) },
-                    shape = RoundedCornerShape(8.dp)
-                  ) {
-                    Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(16.dp))
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text("Reconnect")
-                  }
-                } else {
-                  Button(
-                    onClick = { onSelectActiveServer(server) },
-                    shape = RoundedCornerShape(8.dp),
-                    modifier = Modifier.testTag("connect_server_btn_${server.id}")
-                  ) {
-                    Text("Connect")
-                  }
+                IconButton(
+                  onClick = { onEditServer(server) },
+                  modifier = Modifier.testTag("edit_server_btn_${server.id}")
+                ) {
+                  Icon(Icons.Default.Edit, contentDescription = "Edit server")
                 }
-
-                Row {
-                  IconButton(
-                    onClick = { onEditServer(server) },
-                    modifier = Modifier.testTag("edit_server_btn_${server.id}")
-                  ) {
-                    Icon(Icons.Default.Edit, contentDescription = "Edit server")
-                  }
-                  IconButton(
-                    onClick = { serverToDelete = server },
-                    modifier = Modifier.testTag("delete_server_btn_${server.id}")
-                  ) {
-                    Icon(
-                      Icons.Default.Delete,
-                      contentDescription = "Delete server",
-                      tint = MaterialTheme.colorScheme.error
-                    )
-                  }
+                IconButton(
+                  onClick = { serverToDelete = server },
+                  modifier = Modifier.testTag("delete_server_btn_${server.id}")
+                ) {
+                  Icon(
+                    Icons.Default.Delete,
+                    contentDescription = "Delete server",
+                    tint = MaterialTheme.colorScheme.error
+                  )
                 }
               }
             }

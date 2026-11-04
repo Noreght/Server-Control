@@ -2,13 +2,18 @@ package com.example.ui.screens
 
 import android.content.Intent
 import android.net.Uri
+import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -16,10 +21,14 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowForwardIos
+import androidx.compose.material.icons.filled.FileDownload
+import androidx.compose.material.icons.filled.FileUpload
 import androidx.compose.material.icons.filled.Fingerprint
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.LockReset
@@ -56,10 +65,29 @@ fun SettingsScreen(
   onToggleBiometric: (Boolean) -> Unit,
   onChangePin: (oldPin: String, newPin: String) -> Boolean,
   onLockApp: () -> Unit,
+  onExportServers: (Uri) -> Unit,
+  onImportServers: (Uri) -> Unit,
+  serverCount: Int = 0,
   modifier: Modifier = Modifier
 ) {
   val context = LocalContext.current
   var showChangePinDialog by remember { mutableStateOf(false) }
+
+  val exportLauncher = rememberLauncherForActivityResult(
+    contract = ActivityResultContracts.CreateDocument("application/octet-stream")
+  ) { uri ->
+    if (uri != null) {
+      onExportServers(uri)
+    }
+  }
+
+  val importLauncher = rememberLauncherForActivityResult(
+    contract = ActivityResultContracts.OpenDocument()
+  ) { uri ->
+    if (uri != null) {
+      onImportServers(uri)
+    }
+  }
 
   if (showChangePinDialog) {
     ChangePinDialog(
@@ -70,13 +98,21 @@ fun SettingsScreen(
     )
   }
 
-  Column(
-    modifier = modifier
-      .fillMaxSize()
-      .padding(16.dp)
-      .testTag("settings_screen")
-  ) {
-    Column(modifier = Modifier.fillMaxWidth()) {
+  BoxWithConstraints(modifier = modifier.fillMaxSize()) {
+    val minScreenHeight = maxHeight
+    Column(
+      modifier = Modifier
+        .fillMaxSize()
+        .verticalScroll(rememberScrollState())
+        .padding(16.dp)
+        .defaultMinSize(minHeight = minScreenHeight)
+        .testTag("settings_screen"),
+      verticalArrangement = Arrangement.SpaceBetween
+    ) {
+      Column(
+        modifier = Modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
+      ) {
       Text(
         text = "Security",
         style = MaterialTheme.typography.titleMedium,
@@ -224,49 +260,168 @@ fun SettingsScreen(
           }
         }
       }
-    }
 
-    Spacer(modifier = Modifier.weight(1f))
+      Spacer(modifier = Modifier.height(20.dp))
+
+      Text(
+        text = "Резервное копирование",
+        style = MaterialTheme.typography.titleMedium,
+        fontWeight = FontWeight.Bold,
+        color = MaterialTheme.colorScheme.primary,
+        modifier = Modifier.padding(bottom = 12.dp, start = 4.dp)
+      )
+
+      OutlinedCard(
+        shape = RoundedCornerShape(16.dp),
+        modifier = Modifier.fillMaxWidth()
+      ) {
+        Column(modifier = Modifier.fillMaxWidth()) {
+          // 1. Export servers item
+          Row(
+            modifier = Modifier
+              .fillMaxWidth()
+              .clickable {
+                try {
+                  exportLauncher.launch("servers.backup")
+                } catch (e: Exception) {
+                  Toast.makeText(context, "Не удалось открыть проводник: ${e.message}", Toast.LENGTH_LONG).show()
+                }
+              }
+              .padding(16.dp)
+              .testTag("export_servers_item"),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+          ) {
+            Row(
+              modifier = Modifier.weight(1f),
+              verticalAlignment = Alignment.CenterVertically
+            ) {
+              Icon(
+                imageVector = Icons.Default.FileUpload,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.size(24.dp)
+              )
+              Spacer(modifier = Modifier.width(16.dp))
+              Column {
+                Text(
+                  text = "Экспорт серверов",
+                  style = MaterialTheme.typography.bodyLarge,
+                  fontWeight = FontWeight.SemiBold
+                )
+                Text(
+                  text = "Сохранить конфигурации в servers.backup (без паролей)",
+                  style = MaterialTheme.typography.bodySmall,
+                  color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+              }
+            }
+
+            Icon(
+              imageVector = Icons.AutoMirrored.Filled.ArrowForwardIos,
+              contentDescription = null,
+              modifier = Modifier.size(16.dp),
+              tint = MaterialTheme.colorScheme.outline
+            )
+          }
+
+          androidx.compose.material3.HorizontalDivider(
+            modifier = Modifier.padding(horizontal = 16.dp),
+            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+          )
+
+          // 2. Import servers item
+          Row(
+            modifier = Modifier
+              .fillMaxWidth()
+              .clickable {
+                try {
+                  importLauncher.launch(arrayOf("*/*"))
+                } catch (e: Exception) {
+                  Toast.makeText(context, "Не удалось открыть проводник: ${e.message}", Toast.LENGTH_LONG).show()
+                }
+              }
+              .padding(16.dp)
+              .testTag("import_servers_item"),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+          ) {
+            Row(
+              modifier = Modifier.weight(1f),
+              verticalAlignment = Alignment.CenterVertically
+            ) {
+              Icon(
+                imageVector = Icons.Default.FileDownload,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.size(24.dp)
+              )
+              Spacer(modifier = Modifier.width(16.dp))
+              Column {
+                Text(
+                  text = "Импорт серверов",
+                  style = MaterialTheme.typography.bodyLarge,
+                  fontWeight = FontWeight.SemiBold
+                )
+                Text(
+                  text = "Загрузить конфигурации из файла .backup",
+                  style = MaterialTheme.typography.bodySmall,
+                  color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+              }
+            }
+
+            Icon(
+              imageVector = Icons.AutoMirrored.Filled.ArrowForwardIos,
+              contentDescription = null,
+              modifier = Modifier.size(16.dp),
+              tint = MaterialTheme.colorScheme.outline
+            )
+          }
+        }
+      }
+    }
 
     // Bottom section: App Version and GitHub link arranged vertically
     Column(
-      modifier = Modifier
-        .fillMaxWidth()
-        .padding(bottom = 16.dp),
-      horizontalAlignment = Alignment.CenterHorizontally,
-      verticalArrangement = Arrangement.spacedBy(10.dp)
-    ) {
-      // App Version
-      Text(
-        text = "Version 1.0",
-        style = MaterialTheme.typography.bodyMedium,
-        fontWeight = FontWeight.Medium,
-        color = MaterialTheme.colorScheme.onSurfaceVariant
-      )
-
-      // GitHub link with GitHub icon beside it
-      Row(
         modifier = Modifier
-          .clickable {
-            val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/Noreght"))
-            context.startActivity(intent)
-          }
-          .padding(horizontal = 12.dp, vertical = 6.dp)
-          .testTag("github_link_button"),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.Center
+          .fillMaxWidth()
+          .padding(top = 28.dp, bottom = 16.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(10.dp)
       ) {
-        GithubVectorIcon(
-          modifier = Modifier.size(20.dp),
-          tint = MaterialTheme.colorScheme.onSurface
-        )
-        Spacer(modifier = Modifier.width(8.dp))
+        // App Version
         Text(
-          text = "https://github.com/Noreght",
-          style = MaterialTheme.typography.bodyMedium.copy(fontSize = 13.sp),
-          color = MaterialTheme.colorScheme.primary,
-          fontWeight = FontWeight.Medium
+          text = "Version 1.0",
+          style = MaterialTheme.typography.bodyMedium,
+          fontWeight = FontWeight.Medium,
+          color = MaterialTheme.colorScheme.onSurfaceVariant
         )
+
+        // GitHub link with GitHub icon beside it
+        Row(
+          modifier = Modifier
+            .clickable {
+              val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/Noreght"))
+              context.startActivity(intent)
+            }
+            .padding(horizontal = 12.dp, vertical = 6.dp)
+            .testTag("github_link_button"),
+          verticalAlignment = Alignment.CenterVertically,
+          horizontalArrangement = Arrangement.Center
+        ) {
+          GithubVectorIcon(
+            modifier = Modifier.size(20.dp),
+            tint = MaterialTheme.colorScheme.onSurface
+          )
+          Spacer(modifier = Modifier.width(8.dp))
+          Text(
+            text = "https://github.com/Noreght",
+            style = MaterialTheme.typography.bodyMedium.copy(fontSize = 13.sp),
+            color = MaterialTheme.colorScheme.primary,
+            fontWeight = FontWeight.Medium
+          )
+        }
       }
     }
   }
